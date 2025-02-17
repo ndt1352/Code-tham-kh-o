@@ -1,0 +1,103 @@
+import cv2
+import tkinter as tk
+from tkinter import Label, Button, Entry, messagebox
+from PIL import Image, ImageTk
+import pandas as pd
+import random
+import os
+
+# Đường dẫn file
+excel_path = r"D:\Face_Recognition\BCN\BCN.xlsx"
+image_folder = r"D:\Face_Recognition\pic"
+
+# Kiểm tra file Excel, nếu không có thì tạo mới
+if not os.path.exists(excel_path):
+    df = pd.DataFrame(columns=["Mã", "Tên", "So_Ngay_Lam", "So_Ngay_Tre", "CT"])
+    df.to_excel(excel_path, index=False)
+else:
+    df = pd.read_excel(excel_path)
+
+# Mở camera
+cap = cv2.VideoCapture(0)
+
+def update_frame():
+    """Cập nhật hình ảnh từ camera lên giao diện"""
+    ret, frame = cap.read()
+    if ret:
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame)
+        imgtk = ImageTk.PhotoImage(image=img)
+        lbl_video.imgtk = imgtk
+        lbl_video.configure(image=imgtk)
+    lbl_video.after(10, update_frame)
+
+def generate_unique_id():
+    """Tạo mã ngẫu nhiên không trùng"""
+    existing_ids = set(df["Mã"].astype(str))  # Chuyển thành tập hợp để kiểm tra nhanh hơn
+    while True:
+        random_number = "A" + str(random.randint(100000, 999999))
+        if random_number not in existing_ids:
+            return random_number
+
+def capture_image():
+    """Chụp ảnh và lưu với tên do người dùng nhập"""
+    ret, frame = cap.read()
+    if ret:
+        filename = entry_name.get().strip()
+        if not filename:
+            messagebox.showwarning("Lỗi", "Vui lòng nhập tên!")
+            return
+        
+        random_number = generate_unique_id()
+
+        # Lưu thông tin vào DataFrame
+        new_row = {'Mã': random_number, "Tên": filename, "So_Ngay_Lam": 0, "So_Ngay_Tre": 0, "CT": 0}
+        df.loc[len(df)] = new_row
+        
+        # Lưu lại vào Excel (kiểm tra nếu file bị mở)
+        try:
+            df.to_excel(excel_path, index=False)
+        except PermissionError:
+            messagebox.showerror("Lỗi", "Không thể lưu dữ liệu! Hãy đóng file Excel rồi thử lại.")
+            return
+        
+        # Lưu ảnh
+        image_path = os.path.join(image_folder, f"{random_number}.jpg")
+        cv2.imwrite(image_path, frame)
+        
+        lbl_status.config(text=f"Mã: {random_number} " + "Tên: "+ str(filename), fg="green")
+
+def on_closing():
+    """Giải phóng camera khi đóng cửa sổ"""
+    cap.release()
+    cv2.destroyAllWindows()
+    root.destroy()
+
+# Tạo cửa sổ Tkinter
+root = tk.Tk()
+root.title("Đăng Kí Chấm Công")
+
+# Nhãn hiển thị video
+lbl_video = Label(root)
+lbl_video.pack()
+
+# Ô nhập tên
+entry_name = Entry(root, font=("Arial", 14), width=20)
+entry_name.pack(pady=5)
+
+# Nút chụp ảnh
+btn_capture = Button(root, text="📸 Chụp ảnh", command=capture_image, font=("Arial", 14))
+btn_capture.pack(pady=10)
+
+# Nhãn trạng thái
+lbl_status = Label(root, text="", fg="green", font=("Arial", 12))
+lbl_status.pack()
+
+# Bắt đầu cập nhật video
+update_frame()
+
+# Bắt sự kiện đóng cửa sổ
+root.protocol("WM_DELETE_WINDOW", on_closing)
+
+# Chạy giao diện
+root.mainloop()
