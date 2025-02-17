@@ -6,7 +6,7 @@ import face_recognition #Nhận diện khuôn mặt.
 import numpy as np #Tính toán
 import os #Làm việc với file
 from PIL import Image, ImageTk #Chuyển đổi ảnh 
-from datetime import datetime #Lấy thời gian hiện tại.
+from datetime import datetime, timedelta #Lấy thời gian hiện tại,thực hiện phép tính ngày tháng. 
 import pandas as pd #: Xử lý file Excel chứa dữ liệu chấm công.
 from unidecode import unidecode # Chuyển đổi chữ có dấu sang không dấu.
 
@@ -15,17 +15,19 @@ def khung(x, y, z, frame, left, top, right, bottom, name):
     cv2.rectangle(frame, (left, top), (right, bottom), (x, y, z), 2)
     cv2.putText(frame, name, (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (x, y, z), 2)
 #Tính khoảng cách Euclidean giữa hai điểm trên mặt
-def euclidean_distance(point1, point2):
-    return np.linalg.norm(np.array(point1) - np.array(point2))
+
+
 #Kiểm tra đi trễ
 def check_time(result):
-    current_time = datetime.now().strftime("%H:%M")
-    #Thời gian quy định
-    preset_time = "7:00" 
-    # So sánh thời gian hiện tại với thời gian quy định
+    # Thời gian hiện tại
+    current_time = datetime.now().time() 
+    # Thời gian trễ
+    preset_time = datetime.strptime("07:00:00", "%H:%M:%S").time()  
+    # So sánh thời gian hiện tại với thời gian trễ
     if current_time > preset_time:
-        result = 1#Đi trễ
-    return result
+        return 1 #Đi trễ
+    return 0
+
 # Đọc và mã hóa khuôn mặt từ các ảnh trong kho dữ liệu
 def load_known_faces(directory):
     known_face_encodings = []
@@ -41,8 +43,8 @@ def load_known_faces(directory):
             # Mã hóa khuôn mặt
             face_encodings = face_recognition.face_encodings(image_rgb)
             if face_encodings:
-                known_face_encodings.append(face_encodings[0])
-                known_face_names.append(os.path.splitext(filename)[0])
+                known_face_encodings.append(face_encodings[0]) #mã hóa khuôn mặt từ file
+                known_face_names.append(os.path.splitext(filename)[0]) #tên khuôn mặt từ file
     
     return known_face_encodings, known_face_names
 
@@ -52,14 +54,18 @@ def TEXT(Text, name, X, COLOR, Y):
     EX = tk.Label(window, text=Text + str(int(SNL))  , font=("Arial", 25))
     EX.config(fg = COLOR)
     EX.place(x = 750, y = Y)
+
 #Reset dữ liệu hàng tháng
 def reset():
-    current_day = datetime.today().strftime("%d")
-    if(int(current_day) == 1):
-        df.iloc[0, 1:] = 0
+    TE = datetime.now() - timedelta(days=1)
+    THANG_HT = datetime.now().strftime("%m-%Y")
+    THANG_FILE = TE.strftime("%m-%Y")
+    if(THANG_HT > THANG_FILE):
+        df.to_excel("D:\\Face_Recognition\\BCN\\BangChamCong_T"+ str(THANG_HT) + ".xlsx",index=False)
         df.iloc[1, 1:] = 0
         df.iloc[2, 1:] = 0
-    df.to_excel("D:\\Face_Recognition\\pic\\BangChamCong.xlsx", index=False)
+        df.iloc[3, 1:] = 0
+    df.to_excel("D:\\Face_Recognition\\BCN\\BangChamCong.xlsx", index=False)
 
 # Hàm cập nhật và hiển thị hình ảnh trong Tkinter
 def update_frame():
@@ -70,13 +76,13 @@ def update_frame():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # Bỏ dòng này
         
         # Phát hiện các khuôn mặt trong ảnh từ camera
-        face_locations = face_recognition.face_locations(frame)
-        face_encodings = face_recognition.face_encodings(frame, face_locations)
-        face_landmarks_list = face_recognition.face_landmarks(frame, face_locations)
+        face_locations = face_recognition.face_locations(frame) #Xác định khuôn mặt
+        face_encodings = face_recognition.face_encodings(frame, face_locations) #Mã hóa khuôn mặt( khung mặt,...)
+        face_landmarks_list = face_recognition.face_landmarks(frame, face_locations) #tính toán điểm đặc trưng(mắt, mũi, miệng,...)
 
         for (top, right, bottom, left), face_encoding, face_landmarks in zip(face_locations, face_encodings, face_landmarks_list):
             # So sánh khuôn mặt từ camera với các khuôn mặt đã biết trong kho dữ liệu
-            matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+            matches = face_recognition.compare_faces(known_face_encodings, face_encoding) #Dữ liệu khuôn mặt
             name = "Unknown"
                 
                 
@@ -87,9 +93,10 @@ def update_frame():
             if matches[best_match_index]:
                 #tên và khung 
                 name = known_face_names[best_match_index]
-                khung(0, 255, 0, frame, left, top, right, bottom, unidecode(name))
+                Cname = df[name][0]
+                khung(0, 255, 0, frame, left, top, right, bottom, unidecode(Cname))
                 #Tên
-                Name = tk.Label(window, text="Tên: " + name + "                                                       ", font=("Arial", 25))
+                Name = tk.Label(window, text="Tên: " + Cname + "                      ", font=("Arial", 25))
                 Name.place(x = 750, y = 150)
                 #Thời gian chấm công
                 current_time = datetime.now().strftime("%H:%M")
@@ -102,25 +109,25 @@ def update_frame():
                     TT.config(fg = "green")
                     time.config(fg="green")
                 else:
-                    TT = tk.Label(window, text="Đi Trễ     " , font=("Arial", 25))
+                    TT = tk.Label(window, text="Đi Trễ        " , font=("Arial", 25))
                     TT.config(fg = "red")
                     time.config(fg="red")
                 TT.place(x = 750, y = 350) 
                 #Dữ liệu
                 current_date = datetime.now().strftime("%d-%m-%Y")
-                if(df[name][2] != current_date):
-                    df[name][2] = current_date
-                    df[name][0] += 1
-                    df[name][1] += result
-                    df.to_excel("D:\\Face_Recognition\\pic\\BangChamCong.xlsx", index=False)
+                if(df[name][3] != current_date):
+                    df[name][3] = current_date
+                    df[name][1] += 1
+                    df[name][2] += result
+                    df.to_excel("D:\\Face_Recognition\\BCN\\BangChamCong.xlsx", index=False)
                 else :
                     c = tk.Label(window, text= "Đã Chấm Công", font=("Arial", 25))
                     c.config(fg = "green")
                     c.place(x = 750, y = 300)
-                TEXT("Số Ngày Làm: ", name, 0, "green", 450)
-                TEXT("Số Ngày Đi Trễ: ", name, 1, "red", 500)
+                TEXT("Số Ngày Làm: ", name, 1, "green", 450)
+                TEXT("Số Ngày Đi Trễ: ", name, 2, "red", 500)
             else:
-                khung(255, 0, 0, frame, left, top, right, bottom, name)
+                khung(255, 0, 0, frame, left, top, right, bottom, Cname)
         # Giảm kích thước hình ảnh (thay đổi kích thước theo tỷ lệ)
         img_pil = Image.fromarray(frame)
         img_resized = img_pil.resize((int(img_pil.width * 0.935), int(img_pil.height * 0.817)))
@@ -157,11 +164,13 @@ label = Label(window, bd=0, highlightthickness=0)
 label.place(x=50, y=90)
     
 # Đọc dữ liệu từ file Excel
-file_path = 'D:\Face_Recognition\pic\BangChamCong.xlsx'  # Đường dẫn đến file Excel
+file_path = 'D:\Face_Recognition\BCN\BangChamCong.xlsx'  # Đường dẫn đến file Excel
 df = pd.read_excel(file_path)  # Đọc toàn bộ dữ liệu từ sheet đầu tiên
-    
+
+
 reset()
-    
+
+
 # Bắt đầu cập nhật hình ảnh từ camera
 update_frame()
 
